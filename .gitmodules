@@ -1,3 +1,6 @@
 [submodule "libraries/TinyGPS"]
 	path = libraries/TinyGPS
 	url = https://github.com/mikalhart/TinyGPS.git
+[submodule "libraries/Adafruit_RGBLCDShield"]
+	path = libraries/Adafruit_RGBLCDShield
+	url = https://github.com/adafruit/Adafruit-RGB-LCD-Shield-Library.git
