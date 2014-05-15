@@ -4,3 +4,18 @@
 [submodule "libraries/Adafruit_RGBLCDShield"]
 	path = libraries/Adafruit_RGBLCDShield
 	url = https://github.com/adafruit/Adafruit-RGB-LCD-Shield-Library.git
+[submodule "libraries/Adafruit_ADXL345_U"]
+	path = libraries/Adafruit_ADXL345_U
+	url = https://github.com/adafruit/Adafruit_ADXL345.git
+[submodule "libraries/Adafruit_BMP085_U"]
+	path = libraries/Adafruit_BMP085_U
+	url = https://github.com/adafruit/Adafruit_BMP085_Unified.git
+[submodule "libraries/Adafruit_HMC5883_U"]
+	path = libraries/Adafruit_HMC5883_U
+	url = https://github.com/adafruit/Adafruit_HMC5883_Unified.git
+[submodule "libraries/Adafruit_Sensor"]
+	path = libraries/Adafruit_Sensor
+	url = https://github.com/adafruit/Adafruit_Sensor.git
+[submodule "libraries/Adafruit_L3GD20_U"]
+	path = libraries/Adafruit_L3GD20_U
+	url = https://github.com/adafruit/Adafruit_L3GD20_U.git
