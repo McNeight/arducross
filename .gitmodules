@@ -19,3 +19,6 @@
 [submodule "libraries/Adafruit_L3GD20_U"]
 	path = libraries/Adafruit_L3GD20_U
 	url = https://github.com/adafruit/Adafruit_L3GD20_U.git
+[submodule "libraries/CAN-Library"]
+	path = libraries/CAN-Library
+	url = https://github.com/McNeight/CAN-Library.git

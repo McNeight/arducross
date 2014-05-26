@@ -7,13 +7,13 @@
  Contains defines and algorythms spelled out in various standards documents including:
  SAE J1939      Recommended Practice for Serial Control and Communications Vehicle Network
  SAE J1939-03   On Board Diagnostics Implementation Guide
- SAE J1978      OBD II Scan Tool — Equivalent to ISO/DIS 15031-4:December 14, 2001
+ SAE J1978      OBD II Scan Tool â€” Equivalent to ISO/DIS 15031-4:December 14, 2001
  SAE J1979      E/E Diagnostic Test Modes
- ISO 15031-5    Road vehicles—Communication between vehicle and external equipment for
- emissions-related diagnostics—Part 5: Emissions-related diagnostic services
- ISO 15765-4    Road vehicles—Diagnostics on controller area network (CAN)—Part 4:
+ ISO 15031-5    Road vehiclesâ€”Communication between vehicle and external equipment for
+ emissions-related diagnosticsâ€”Part 5: Emissions-related diagnostic services
+ ISO 15765-4    Road vehiclesâ€”Diagnostics on controller area network (CAN)â€”Part 4:
  Requirements for emissions-related systems
- ISO 27145-4    Road vehicles—Implementation of WWH-OBD communication requirements—Part 4:
+ ISO 27145-4    Road vehiclesâ€”Implementation of WWH-OBD communication requirementsâ€”Part 4:
  Connection between vehicle and test equipment
 
  ISO 15031 Definitions:
@@ -32,8 +32,7 @@
 #ifndef wwh_obd__h
 #define wwh_obd__h
 
-#include <Canbus.h>
-#include <mcp2515.h>
+#include <can.h>
 
 #define OBD_TIMEOUT_SHORT 2000 /* ms */
 #define OBD_TIMEOUT_LONG 7000 /* ms */
@@ -43,22 +42,22 @@
 // SAE J1979-DA Revised OCT2011
 // APPENDIX B - (NORMATIVE)
 // PIDS (PARAMETER ID) FOR SERVICES $01 AND $02 SCALING AND DEFINITION
-#define PID_DTCFRZF 0x02
-#define PID_FUELSYS 0x03
-#define PID_LOAD_PCT 0x04
-#define PID_ECT 0x05
-#define PID_SHRTFT13 0x06
-#define PID_LONGFT13 0x07
-#define PID_SHRTFT24 0x08
-#define PID_LONGFT24 0x09
-#define PID_FP 0x0A
-#define PID_MAP 0x0B
-#define PID_RPM 0x0C
-#define PID_SPEED 0x0D
-#define PID_SPARKADV 0x0E
-#define PID_IAT 0x0F
-#define PID_MAF 0x10
-#define PID_TP 0x11
+#define PID_DTCFRZF 0x02 // DTC that caused required freeze frame data storage
+#define PID_FUELSYS 0x03 // Fuel system status
+#define PID_LOAD_PCT 0x04 // Calculated LOAD Value
+#define PID_ECT 0x05 // Engine Coolant Temperature
+#define PID_SHRTFT13 0x06 // Short Term Fuel Trim - Banks 1 & 3
+#define PID_LONGFT13 0x07 // Long Term Fuel Trim - Banks 1 & 3
+#define PID_SHRTFT24 0x08 // Short Term Fuel Trim - Banks 2 & 4
+#define PID_LONGFT24 0x09 // Long Term Fuel Trim - Banks 2 & 4
+#define PID_FP 0x0A // Fuel Pressure (gauge)
+#define PID_MAP 0x0B // Intake Manifold Absolute Pressure
+#define PID_RPM 0x0C // Engine RPM
+#define PID_SPEED 0x0D // Vehicle Speed Sensor
+#define PID_SPARKADV 0x0E // Ignition Timing Advance for #1 Cylinder
+#define PID_IAT 0x0F // Intake Air Temperature
+#define PID_MAF 0x10 // Air Flow Rate from Mass Air Flow Sensor
+#define PID_TP 0x11 // Absolute Throttle Position
 // Location of Oxygen Sensors, where sensor 1 is closest to the engine. Each bit indicates the
 // presence or absence of an oxygen sensor at the following location.
 #define PID_O2SLOC2 0x13
@@ -80,13 +79,27 @@
 
 #define PID_O2SLOC4 0x1D
 
-#define PID_ABS_ENGINE_LOAD 0x43
-#define PID_AMBIENT_TEMP 0x46
+#define PID_RUNTM 0x1F
+#define PID_FLI 0x2F
+#define PID_CLR_DIST 0x31
+#define PID_BARO 0x33
 
-#define PID_BAROMETRIC 0x33
-#define PID_FUEL_LEVEL 0x2F
-#define PID_RUNTIME 0x1F
-#define PID_DISTANCE 0x31
+#define PID_LOAD_ABS 0x43 // Absolute Load Value
+#define PID_LAMBDA 0x44 // Fuel/Air Commanded Equivalence Ratio
+#define PID_TP_R 0x45 // Relative Throttle Position
+#define PID_AAT 0x46 // Ambient air temperature
+#define PID_TP_B 0x47 // Absolute Throttle Position B
+#define PID_TP_C 0x48 // Absolute Throttle Position C
+#define PID_APP_D 0x49 // Accelerator Pedal Position D
+#define PID_APP_E 0x4A // Accelerator Pedal Position E
+#define PID_APP_F 0x4B // Accelerator Pedal Position F
+#define PID_TAC_PCT 0x4C // Commanded Throttle Actuator Control
+
+#define PID_FUEL_TYP 0x51 // Type of fuel currently being utilized by the vehicle
+#define PID_ALCH_PCT 0x52 // Alcohol Fuel Percentage
+
+#define PID_APP_R 0x5A // Relative Accelerator Pedal Position
+#define PID_BAT_PWR 0x5B // Hybrid/EV Battery Pack Remaining Charge
 
 // ISO 15765-4:2011
 // Table 6
@@ -149,13 +162,11 @@ class WWH_OBD
 {
   public:
     WWH_OBD();
-    char* decodePID(tCAN messageIn);
-    char* ecuQuery(unsigned char sid, unsigned char pid);
+    byte decodePID(byte* data, char* text);
+    //char* ecuQuery(unsigned char sid, unsigned char pid);
 
   private:
 };
 
 #endif
-
-
 
