@@ -1,6 +1,42 @@
-#include <stdio.h>
+/*
+ World Wide Harmonized On-Board Diagnostics (WWH OBD)
+ by:
+ date:
+ license:
+
+ Contains defines and algorithms spelled out in various standards documents including:
+ SAE J1939      Recommended Practice for Serial Control and Communications Vehicle Network
+ SAE J1939-03   On Board Diagnostics Implementation Guide
+ SAE J1978      OBD II Scan Tool - Equivalent to ISO/DIS 15031-4:December 14, 2001
+ SAE J1979      E/E Diagnostic Test Modes
+ ISO 15031-5    Road vehicles - Communication between vehicle and external equipment for
+ emissions-related diagnostics - Part 5: Emissions-related diagnostic services
+ ISO 15765-4    Road vehicles - Diagnostics on controller area network (CAN) - Part 4:
+ Requirements for emissions-related systems
+ ISO 27145-4    Road vehicles - Implementation of WWH-OBD communication requirements - Part 4:
+ Connection between vehicle and test equipment
+
+ ISO 15031 Definitions:
+ DLC = Data Length Code
+ DTC = Diagnostic Trouble Code
+ ECM = Engine Control Module
+ ECU = Electronic Control Module
+ FTB = Failure Type Byte
+ KWP = Key Word Protocol (ISO 14230)
+ MIL = Malfunction Indicator Lamp
+ NRC = Negative Response Code
+ PCI = Protocol Control Information
+ PID = Parameter ID (similar to DID or LID)
+ SID = Service ID
+ */
+ 
+
+//#include <stdio.h>
 #include "WWH_OBD.h"
 
+/*
+
+*/
 WWH_OBD::WWH_OBD()
 {
   // Set CAN Controller to 250K
@@ -9,6 +45,19 @@ WWH_OBD::WWH_OBD()
 
 }
 
+/*
+
+*/
+byte* WWH_OBD::encodeQuery(unsigned char sid, unsigned char pid)
+{
+  byte J1979_data[] = {0x02, sid, pid, 0x00, 0x00, 0x00, 0x00, 0x00};
+  //  CAN1.send(ID_REQUEST, stdID, 8, J1979_data);
+  return J1979_data;
+}
+
+/*
+
+*/
 byte WWH_OBD::decodePID(byte* data, char* text)
 {
   byte decode_buffer_size = 17;
@@ -20,6 +69,9 @@ byte WWH_OBD::decodePID(byte* data, char* text)
 
   switch (pid)
   {
+    case PID_FUELSYS:
+      snprintf(decode_buffer, decode_buffer_size, "BITFIELD");
+      break;
     case PID_ECT:
       // A - 40 [degree C]
       decode_int = data[3] - 40;

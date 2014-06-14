@@ -19,6 +19,7 @@
 #include <Adafruit_MCP23017.h>
 #include <Adafruit_RGBLCDShield.h>
 #include "WWH_OBD.h"
+#include "Ford_OBD.h"
 
 // The shield uses the I2C SCL and SDA pins. On classic Arduinos
 // this is Analog 4 and 5 so you can't use those for analogRead() anymore
@@ -49,24 +50,30 @@ const int chipSelect = 10;
 
 // First we define our CAN mode and rate.
 
-#define bitrate 500 // define CAN speed (bitrate)
+#define bitrate CAN_BPS_500K // define CAN speed (bitrate)
 
-/*
-  Second we create CAN1 object (CAN channel) and select SPI CS Pin. Do not use "CAN" by itself as it will cause compile errors.
-  Needs to be CAN0, CAN1, CAN2, or whatever name you want to give that channel. This can also allow us to create more channels
+/* 
+  Second we create CANbus object (CAN channel) and select SPI CS Pin. Do not use "CAN" by itself as it will cause compile errors.
+  Can't use CAN0 or CAN1 as variable names, as they are defined in hardware/arduino/sam/system/CMSIS/Device/ATMEL/sam3xa/include/sam3x8e.h
+  Needs to be CANbus0, CANbus1, CANbus2, or whatever name you want to give that channel. This can also allow us to create more channels
   using more MCP2515s as long as we use different SPI CS to control data.
  */
 
 #if defined(ARDUINO_ARCH_AVR)
-CAN_MCP2515 CAN1(chipSelect); //Create CAN Channel
+// Can't use CAN0 or CAN1 as variable names, as they are defined in
+CAN_MCP2515 CANbus(10); // Create CAN channel using pin 10 for SPI chip select
 #elif defined(ARDUINO_ARCH_SAM)
-CAN_SAM3X8E CAN1;
-CAN1.init(SystemCoreClock, CAN_BPS_1000K);
+// Can't use CAN0 or CAN1 as variable names, as they are defined in
+CAN_SAM3X8E CANbus(0);  // Create CAN channel on CAN bus 0
+//CAN1.init(SystemCoreClock, CAN_BPS_500K);
 #else
-#error “This library only supports boards with an AVR or SAM processor.”
+#error This library only supports boards with an AVR or SAM processor.
 #endif
 
-WWH_OBD OBD;
+SoftwareSerial gps =  SoftwareSerial(8, 7);
+
+WWH_OBD   OBD;
+Ford_OBD FOBD;
 
 const byte buffer_size = 100;
 char buffer[buffer_size];  //Data will be temporarily stored to this buffer before being written to the file
@@ -74,19 +81,19 @@ char tempbuf[15];
 char lat_str[14];
 char lon_str[14];
 
-
 int read_size = 0; //Used as an indicator for how many characters are read from the file
 int count = 0;     //Miscellaneous variable
-
-int LED1 = 13;
-int LED2 = 8;
-int LED3 = 7;
 
 uint8_t buttons;
 bool dash = false;
 bool info = false;
+bool ford = false;
+// Ford transmission related info
+int engine_torque; // 1E00
+uint32_t shifter_status; // 1E03
+uint8_t gear_commanded; // 1E12
+uint8_t gear_engaged; // 1E1F
 
-SoftwareSerial gps =  SoftwareSerial(8, 7);
 char *parseptr;
 char buffidx;
 uint8_t hour, minute, second, year, month, date;
@@ -96,7 +103,7 @@ char latdir, longdir;
 char status;
 uint32_t waypoint = 0;
 
-volatile uint8_t selected_pid = PID_RPM;
+uint8_t selected_pid = PID_RPM;
 
 /*
 
@@ -111,18 +118,88 @@ void setup() {
 
   //  gps.begin(9600);
 
-  pinMode(LED1, OUTPUT);
-  pinMode(LED2, OUTPUT);
-  pinMode(LED3, OUTPUT);
-
-  digitalWrite(LED2, LOW);
-
-  Serial.println("ECU Reader");  /* For debug use */
-
   // set up the LCD's number of columns and rows:
   lcd.begin(16, 2);
   lcd.setBacklight(WHITE);
 
+  Serial.println("Arducross");  /* For debug use */
+
+  mainMenu();
+
+  CAN1.begin(bitrate); //Set CAN mode and speed.
+
+//  if (CAN1.readMode() == MCP2515_MODE_NORMAL) // Check to see if we set the Mode and speed correctly. For debugging purposes only.
+//  {
+//    Serial.println(F("CAN Initialization complete"));
+//    lcd.print(F("Init complete"));
+//  }
+//  else
+//  {
+//    Serial.println(F("CAN Initialization failed"));
+//    lcd.print(F("Init failed"));
+//    init_fail();
+//  }
+
+//  lcd.setCursor(0, 1);
+//  if (CAN1.readRate() == bitrate)
+//  {
+//    Serial.print (F("CAN speed set to: "));
+//    lcd.print(F("Speed: "));
+//    Serial.print(bitrate);
+//    lcd.print(bitrate);
+//    Serial.println (F("kbit/s"));
+//    lcd.print(F("kbit/s"));
+//  }
+//  else
+//  {
+//    Serial.println(F("CAN speed failed"));
+//    lcd.print(F("Speed failed"));
+//    init_fail();
+//  }
+//
+//  delay(2000);
+
+  lcd.clear();
+}
+
+/*
+
+*/
+void loop() {
+
+  if (dash)
+  {
+    dashboard();
+  }
+  else if (info)
+  {
+    vehicleInfo();
+  }
+  else if (ford)
+  {
+    fordInfo();
+  }
+  else
+  {
+    mainMenu();
+  }
+
+  delay(25);
+}
+
+/*
+
+*/
+void supportedPIDs()
+{
+  bool supportedList[20][8] = {0};
+}
+
+/*
+
+*/
+void mainMenu()
+{
   lcd.print(F("U:Vehicle Info"));
   // set the cursor to column 0, line 1
   // (note: line 1 is the second row, since counting begins with 0):
@@ -136,56 +213,32 @@ void setup() {
     if (buttons & BUTTON_DOWN) {
       dash = true;
       info = false;
-      lcd.print("DASH");
-      Serial.println("DASH");
+      ford = false;
+      lcd.print(F("DASH"));
+      Serial.println(F("DASH"));
       break;
     }
     else if (buttons & BUTTON_UP)
     {
       dash = false;
       info = true;
-      lcd.print("INFO");
-      Serial.println("INFO");
+      ford = false;
+      lcd.print(F("INFO"));
+      Serial.println(F("INFO"));
+      break;
+    }
+    else if (buttons & BUTTON_LEFT)
+    {
+      dash = false;
+      info = false;
+      ford = true;
+      lcd.print(F("FORD"));
+      Serial.println(F("FORD"));
       break;
     }
 
     delay(5);
   }
-
-  lcd.clear();
-
-  CAN1.begin(bitrate); //Set CAN mode and speed.
-
-  if (CAN1.readMode() == MCP2515_MODE_NORMAL) // Check to see if we set the Mode and speed correctly. For debugging purposes only.
-  {
-    Serial.println("CAN Initialization complete");
-    lcd.print("Init complete");
-  }
-  else
-  {
-    Serial.println("CAN Initialization failed");
-    lcd.print("Init failed");
-    init_fail();
-  }
-
-  lcd.setCursor(0, 1);
-  if (CAN1.readRate() == bitrate)
-  {
-    Serial.print ("CAN speed set to: ");
-    lcd.print("Speed: ");
-    Serial.print(bitrate);
-    lcd.print(bitrate);
-    Serial.println ("kbit/s");
-    lcd.print("kbit/s");
-  }
-  else
-  {
-    Serial.println("CAN speed failed");
-    lcd.print("Speed failed");
-    init_fail();
-  }
-
-  delay(2000);
 
   lcd.clear();
 }
@@ -209,10 +262,10 @@ uint32_t parsedecimal(char *str) {
 /*
 
 */
-void query_ecu(unsigned char sid, unsigned char pid)
+void query_ecu(byte sid, byte pid)
 {
   byte J1979_data[] = {0x02, sid, pid, 0x00, 0x00, 0x00, 0x00, 0x00};
-  CAN1.send(ID_REQUEST, stdID, 8, J1979_data);
+  CAN1.write(ID_REQUEST, CAN_BASE_FRAME, 8, J1979_data);
 }
 
 /*
@@ -233,20 +286,28 @@ void vehicleInfo()
   if (buttons & BUTTON_LEFT) {
     selected_pid--;
     lcd.clear();
-    Serial.print("selected_pid = 0x");
+    Serial.print(F("selected_pid = 0x"));
     Serial.println(selected_pid, HEX);
   }
   else if (buttons & BUTTON_RIGHT)
   {
     selected_pid++;
     lcd.clear();
-    Serial.print("selected_pid = 0x");
+    Serial.print(F("selected_pid = 0x"));
     Serial.println(selected_pid, HEX);
+  }
+  else if (buttons & BUTTON_DOWN)
+  {
+    lcd.clear();
+    info = false;
+    dash = false;
+    ford = false;
+    return;
   }
 
   query_ecu(SIDRQ_DIAG, selected_pid);
 
-  if (CAN1.msgAvailable() == true) {          // Check to see if a valid message has been received.
+  if (CAN1.available() == true) {          // Check to see if a valid message has been received.
 
     //CAN1.read(&message);                     //read message, it will follow the J1939 structure of ID,Priority, source address, destination address, DLC, PGN,
     CAN1.read(&can_ID, &can_length, can_data);                        // read Message and assign data through reference operator &
@@ -256,9 +317,9 @@ void vehicleInfo()
       decoded_pid = OBD.decodePID(can_data, buffer);
       //      lcd.print("ID:");
       //      lcd.print(can_ID, HEX);
-      lcd.print("Len:");
+      lcd.print(F("Len:"));
       lcd.print(can_length);                           // Displays message length
-      lcd.print(" PID:");
+      lcd.print(F(" PID:"));
       if (decoded_pid < 0x10)                   //Adds a leading zero
       {
         lcd.print("0");
@@ -270,22 +331,22 @@ void vehicleInfo()
 
       //#define SERIAL_DEBUG
 #ifdef SERIAL_DEBUG
-      Serial.print("Time | ");
+      Serial.print(F("Time | "));
       Serial.print(millis());
-      Serial.print(" | ID");
-      Serial.print(" | ");
+      Serial.print(F(" | ID"));
+      Serial.print(F(" | "));
       Serial.print(can_ID, HEX);                                // Displays received ID
-      Serial.print(" | ");
-      Serial.print("Data Length");
-      Serial.print(" | ");
+      Serial.print(F(" | "));
+      Serial.print(F("Data Length"));
+      Serial.print(F(" | "));
       Serial.print(can_length, HEX);                           // Displays message length
-      Serial.print(" | ");
-      Serial.print("Data");
+      Serial.print(F(" | "));
+      Serial.print(F("Data"));
       for (byte i = 0; i < can_length; i++) {
         Serial.print(" | ");
         if (can_data[i] < 0x10)                                 // If the data is less than 10 hex it will assign a zero to the front as leading zeros are ignored...
         {
-          Serial.print("0");
+          Serial.print(F("0"));
         }
         Serial.print(can_data[i], HEX);                         // Displays message data
 
@@ -312,16 +373,16 @@ void vehicleInfo()
     decoded_pid = OBD.decodePID(can_data, buffer);
     //    lcd.print("ID:");
     //    lcd.print(can_ID, HEX);
-    lcd.print("Len:");
+    lcd.print(F("Len:"));
     lcd.print(can_length);                           // Displays message length
-    lcd.print(" PID:");
+    lcd.print(F(" PID:"));
     if (decoded_pid < 0x10)                   //Adds a leading zero
     {
-      lcd.print("0");
+      lcd.print(F("0"));
     }
     lcd.print(decoded_pid, HEX);           //Display PID
 #else
-    lcd.print("NO CAN MESSAGE");
+    lcd.print(F("NO CAN MESSAGE"));
 #endif
     lcd.setCursor(0, 1);
     lcd.print(buffer);
@@ -357,10 +418,18 @@ void dashboard()
     //    Serial.print("selected_pid = ");
     //    Serial.println(selected_pid);
   }
+  else if (buttons & BUTTON_UP)
+  {
+    lcd.clear();
+    info = false;
+    dash = false;
+    ford = false;
+    return;
+  }
 
   query_ecu(SIDRQ_DIAG, PID_APP_R);
 
-  if (CAN1.msgAvailable() == true) {          // Check to see if a valid message has been received.
+  if (CAN1.available() == true) {          // Check to see if a valid message has been received.
 
     //CAN1.read(&message);                     //read message, it will follow the J1939 structure of ID,Priority, source address, destination address, DLC, PGN,
     CAN1.read(&can_ID, &can_length, can_data);                        // read Message and assign data through reference operator &
@@ -373,7 +442,7 @@ void dashboard()
   else
   {
     //Serial.println("No CAN message available");
-    strlcpy(buffer, "NO APP", buffer_size);
+    //strlcpy(buffer, "NO APP", buffer_size);
   }
   //Serial.println("Done with RPM");
 
@@ -382,7 +451,7 @@ void dashboard()
 
   query_ecu(SIDRQ_DIAG, PID_TP_R);
 
-  if (CAN1.msgAvailable() == true) {          // Check to see if a valid message has been received.
+  if (CAN1.available() == true) {          // Check to see if a valid message has been received.
 
     //CAN1.read(&message);                     //read message, it will follow the J1939 structure of ID,Priority, source address, destination address, DLC, PGN,
     CAN1.read(&can_ID, &can_length, can_data);                        // read Message and assign data through reference operator &
@@ -394,7 +463,7 @@ void dashboard()
   }
   else
   {
-    strlcat(buffer, "NO TP", buffer_size);
+    //strlcat(buffer, "NO TP", buffer_size);
   }
 
   lcd.print(buffer);
@@ -404,7 +473,7 @@ void dashboard()
 
   query_ecu(SIDRQ_DIAG, PID_RPM);
 
-  if (CAN1.msgAvailable() == true) {          // Check to see if a valid message has been received.
+  if (CAN1.available() == true) {          // Check to see if a valid message has been received.
 
     //CAN1.read(&message);                     //read message, it will follow the J1939 structure of ID,Priority, source address, destination address, DLC, PGN,
     CAN1.read(&can_ID, &can_length, can_data);                        // read Message and assign data through reference operator &
@@ -416,7 +485,7 @@ void dashboard()
   }
   else
   {
-    strlcpy(buffer, "NO RPM", buffer_size);
+    //strlcpy(buffer, "NO RPM", buffer_size);
   }
 
   // Add a space between values
@@ -424,7 +493,7 @@ void dashboard()
 
   query_ecu(SIDRQ_DIAG, PID_LOAD_PCT);
 
-  if (CAN1.msgAvailable() == true) {          // Check to see if a valid message has been received.
+  if (CAN1.available() == true) {          // Check to see if a valid message has been received.
 
     //CAN1.read(&message);                     //read message, it will follow the J1939 structure of ID,Priority, source address, destination address, DLC, PGN,
     CAN1.read(&can_ID, &can_length, can_data);                        // read Message and assign data through reference operator &
@@ -436,7 +505,7 @@ void dashboard()
   }
   else
   {
-    strlcat(buffer, "NO LOAD", buffer_size);
+    //strlcat(buffer, "NO LOAD", buffer_size);
   }
 
   lcd.print(buffer);
@@ -453,6 +522,88 @@ void dashboard()
 
 }
 
+/*
+
+*/
+void fordInfo()
+{
+  byte decoded_pid;
+  unsigned long can_ID;                                       // assign a variable for Message ID
+  byte can_length;                                            //assign a variable for length
+  byte can_data[8];                                           //assign an array for data
+
+  lcd.home();
+  buffer[0] = 0;
+
+  buttons = lcd.readButtons();
+
+  if (buttons & BUTTON_LEFT) {
+    //    selected_pid--;
+    //    lcd.clear();
+    //    Serial.print("selected_pid = 0x");
+    //    Serial.println(selected_pid, HEX);
+  }
+  else if (buttons & BUTTON_RIGHT)
+  {
+    lcd.clear();
+    info = false;
+    dash = false;
+    ford = false;
+    return;
+  }
+  else if (buttons & BUTTON_UP)
+  {
+    byte J1979_data[] = {0x03, 0x22, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    CAN1.write(ID_REQUEST, CAN_BASE_FRAME, 8, J1979_data);
+
+    //query_ecu(SIDRQ_DIAG, 0x00);
+  }
+
+  if (CAN1.available() == true) {          // Check to see if a valid message has been received.
+
+    //CAN1.read(&message);                     //read message, it will follow the J1939 structure of ID,Priority, source address, destination address, DLC, PGN,
+    CAN1.read(&can_ID, &can_length, can_data);                        // read Message and assign data through reference operator &
+
+    if (can_ID == ID_REPLY_1)
+    {
+      decoded_pid = OBD.decodePID(can_data, buffer);
+
+      lcd.clear();
+      lcd.print(F("Len:"));
+      Serial.print(F("CAN Length:"));
+      lcd.print(can_length);                           // Displays message length
+      Serial.print(can_length);
+      lcd.print(F(" PID:"));
+      Serial.print(F(" PID:"));
+      if (decoded_pid < 0x10)                   //Adds a leading zero
+      {
+        lcd.print(F("0"));
+        Serial.print(F("0"));
+      }
+      lcd.print(decoded_pid, HEX);           //Display PID
+      Serial.println(decoded_pid, HEX);
+      lcd.setCursor(0, 1);
+      lcd.print(buffer);
+      Serial.println(buffer);
+    }
+  }
+  else
+  {
+    //Serial.println("No CAN message available");
+    //strlcpy(buffer, "NO APP", buffer_size);
+  }
+}
+
+/*
+
+*/
+void initialization()
+{
+}
+
+/*
+
+*/
 void init_fail()
 {
   // If none of the protocol tests shown above succeeds, the equipment shall repeat all of them
@@ -467,19 +618,5 @@ void init_fail()
   // of failed initialization attempts to the user.
 
   while (1);
-}
-
-void loop() {
-
-  if (dash)
-  {
-    dashboard();
-  }
-  else if (info)
-  {
-    vehicleInfo();
-  }
-
-  delay(25);
 }
 
